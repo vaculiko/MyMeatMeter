@@ -8,7 +8,7 @@
  *  1x Potravinářský teplotní senzor PT1000, 1.25m              https://www.laskakit.cz/potravinarsky-teplotni-senzor-pt1000--1-25m/
  *  1x Termočlánek typu K 600C M6 1m                            https://www.laskakit.cz/termoclanek-typu-k-600c-m6-1m/
  *  3x μŠup-SPI JST-SH 6-pin kabel - 10cm                       https://www.laskakit.cz/--sup-spi-jst-sh-6-pin-kabel-10cm/
- *  Optional for better wire management: 
+ *  Optional for better wire management: a
  *  1x μŠup, STEMMA QT, Qwiic JST-SH 4-pin kabel - dupont samice https://www.laskakit.cz/--sup--stemma-qt--qwiic-jst-sh-4-pin-kabel-dupont-samice/
  * 
  * Email:podpora@laskakit.cz
@@ -29,6 +29,9 @@
 #include "page.h"
 
 #include <GxEPD2_BW.h>
+#include <WiFiUdp.h>
+#include <NTPClient.h>
+
 
 #define PT1000 // select sensor type: PT100 or PT1000
 
@@ -52,7 +55,10 @@ const char *host = "smokehouse"; // Connect to http://smokehouse.local
 #define DELAYTIME 1   //seconds
 #define DEGREE_SIGN 247
 
+// Define UDP instance for NTP
+WiFiUDP ntpUDP;
 
+NTPClient timeClient(ntpUDP, "tik.cesnet.cz", 0);  // UTC offset = 0, no auto update
 
 GxEPD2_BW<GxEPD2_290_GDEY029T94, GxEPD2_290_GDEY029T94::HEIGHT> display(GxEPD2_290_GDEY029T94(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4));     // ESPink-Shelf-213 GDEM0213B74 -> 2.13" 122x250, SSD1680 
 
@@ -63,8 +69,8 @@ Adafruit_MAX31856 thermoK = Adafruit_MAX31856(MAX31856_CS, MOSI, MISO, SCK);  //
 WebServer server(80);
 
 /* -----------------WiFi network ---------------- */
-char ssid[] = "xxxxx"; // Replace with your SSID
-char pass[] = "xxxxx"; // Replace with your password
+char ssid[] = "Welcome to the Jungle"; // Replace with your SSID
+char pass[] = "fajny bober"; // Replace with your password
 
 void thermoK_init(void)
 {
@@ -180,13 +186,13 @@ void display_print(void)
   display.fillScreen(GxEPD_WHITE);
 
 	display.setTextSize(4);
-	display.getTextBounds("Meat", 0, 0, &x1, &y1, &w, &h);
+	display.getTextBounds("Maso", 0, 0, &x1, &y1, &w, &h);
 	display.setCursor(((display.width() / 4) - (w / 2)), 0);
-	display.print("Meat");
+	display.print("Maso");
 
-	display.getTextBounds("Inside", 0, 0, &x1, &y1, &w, &h);
+	display.getTextBounds("Udirna", 0, 0, &x1, &y1, &w, &h);
 	display.setCursor(((display.width() * 0.75) - (w / 2)), 0);
-	display.print("Inside");
+	display.print("Udirna");
 
 	display.drawLine((display.width() / 2), 0, (display.width() / 2), display.height(), GxEPD_BLACK);
 	display.drawLine(0, h + 2, display.width(), h + 2, GxEPD_BLACK);
@@ -336,6 +342,18 @@ uint8_t delay_nonBlocking(uint16_t seconds)
   return 0;
 }
 
+void handleTime() {
+  // Only update when requested
+  timeClient.update();  // fetch current time from NTP
+
+  unsigned long epochTime = timeClient.getEpochTime();  // UTC seconds
+  struct tm *ptm = gmtime((time_t *)&epochTime);        // UTC time
+  char timeString[32];
+  strftime(timeString, sizeof(timeString), "%Y-%m-%dT%H:%M:%SZ", ptm); // ISO 8601 UTC
+
+  server.send(200, "text/plain", timeString);
+}
+
 void setup(void)
 {
   // Turn on the second stabilisator
@@ -353,6 +371,7 @@ void setup(void)
 	server.onNotFound(handleNotFound); // Function done when hangle is not found
 	server.on("/readMeatTemp", handleMeatTemp);
 	server.on("/readInnerTemp", handleInnerTemp);
+	server.on("/readTime", handleTime);  // only update NTP on request
 	server.begin();
 	Serial.println("HTTP server started");
 
